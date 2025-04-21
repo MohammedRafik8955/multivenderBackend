@@ -113,6 +113,11 @@ router.put(
         order.paymentInfo.status = "Succeeded";
         const serviceCharge = order.totalPrice * .10;
         await updateSellerInfo(order.totalPrice - serviceCharge);
+        
+  // Update product stock and sold count here
+  for (const o of order.cart) {
+    await updateOrder(o._id, o.qty);
+  }
       }
 
       await order.save({ validateBeforeSave: false });

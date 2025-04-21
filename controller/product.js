@@ -196,4 +196,65 @@ router.get(
     }
   })
 );
+
+// update/edit product
+router.put(
+  "/edit-shop-product/:id",
+  isSeller,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const productId = req.params.id;
+      const existingProduct = await Product.findById(productId);
+
+      if (!existingProduct) {
+        return next(new ErrorHandler("Product not found", 404));
+      }
+
+      let images = [];
+
+      if (req.body.images) {
+        // Delete old images from cloudinary
+        for (let i = 0; i < existingProduct.images.length; i++) {
+          await cloudinary.v2.uploader.destroy(existingProduct.images[i].public_id);
+        }
+
+        // Upload new images
+        if (typeof req.body.images === "string") {
+          images.push(req.body.images);
+        } else {
+          images = req.body.images;
+        }
+
+        const imageLinks = [];
+
+        for (let i = 0; i < images.length; i++) {
+          const result = await cloudinary.v2.uploader.upload(images[i], {
+            folder: "products",
+          });
+
+          imageLinks.push({
+            public_id: result.public_id,
+            url: result.secure_url,
+          });
+        }
+
+        req.body.images = imageLinks;
+      }
+
+      const updatedProduct = await Product.findByIdAndUpdate(productId, req.body, {
+        new: true,
+        runValidators: true,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Product updated successfully!",
+        product: updatedProduct,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
 module.exports = router;

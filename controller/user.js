@@ -137,6 +137,79 @@ router.post(
   })
 );
 
+// forgot 
+
+// forgot password
+router.post(
+  "/forgot-password",
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { email } = req.body;
+
+      const user = await User.findOne({ email });
+      if (!user) {
+        return next(new ErrorHandler("User not found with this email", 404));
+      }
+
+      const resetToken = jwt.sign(
+        { id: user._id },
+        process.env.RESET_PASSWORD_SECRET,
+        { expiresIn: "15m" }
+      );
+
+      const resetUrl = `http://localhost:3000/reset-password/${resetToken}`;
+
+      await sendMail({
+        email: user.email,
+        subject: "Password Reset Request",
+        message: `Hi ${user.name},\n\nClick this link to reset your password:\n\n${resetUrl}\n\nIf you didn’t request this, ignore it.`,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Reset link sent to ${user.email}`,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+
+// reset password
+router.put(
+  "/reset-password",
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return next(new ErrorHandler("All fields are required", 400));
+      }
+
+      const decoded = jwt.verify(token, process.env.RESET_PASSWORD_SECRET);
+      const user = await User.findById(decoded.id).select("+password");
+
+      if (!user) {
+        return next(new ErrorHandler("Invalid token or user doesn't exist", 400));
+      }
+
+      user.password = newPassword;
+      await user.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    } catch (error) {
+      return next(
+        new ErrorHandler("Link expired or invalid token", 500)
+      );
+    }
+  })
+);
+
+
 // load user
 router.get(
   "/getuser",

@@ -361,4 +361,77 @@ router.delete(
   })
 );
 
+
+// forgot password
+router.post(
+  "/forgot-password",
+  catchAsyncErrors(async (req, res, next) => {
+    const { email } = req.body;
+
+    const user = await Shop.findOne({ email });
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
+
+    const resetToken = jwt.sign({ id: user._id }, process.env.RESET_PASSWORD_SECRET, {
+      expiresIn: "15m",
+    });
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordTime = Date.now() + 15 * 60 * 1000; // 15 minutes
+    await user.save();
+
+    const resetUrl = `http://localhost:3000/seller/reset-password/${resetToken}`;
+
+    await sendMail({
+      email: user.email,
+      subject: "Reset Your Password",
+      message: `Hello, please click on the link to reset your password: ${resetUrl}`,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Reset link sent to: ${user.email}`,
+    });
+  })
+);
+
+
+// reset password
+router.post(
+  "/reset-password/:token",
+  catchAsyncErrors(async (req, res, next) => {
+    const resetToken = req.params.token;
+
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.RESET_PASSWORD_SECRET);
+    } catch (err) {
+      return next(new ErrorHandler("Token is invalid or expired", 400));
+    }
+
+    const user = await Shop.findOne({
+      _id: decoded.id,
+      resetPasswordToken: resetToken,
+      resetPasswordTime: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return next(new ErrorHandler("Invalid or expired reset token", 400));
+    }
+
+    user.password = req.body.newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordTime = undefined;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+    });
+  })
+);
+
+
 module.exports = router;
